@@ -613,6 +613,26 @@ class RetryKilledJob
   end
 end
 
+class KilledDuringFailureHooksJob
+  extend Resque::Plugins::Retry
+  @queue = :testing
+  @fatal_exceptions = [CustomException]
+
+  def self.perform
+    raise CustomException, "failed but won't retry"
+  end
+
+  # After clearing the retry key in the on_failure_retry supermethod, kill the
+  # child job's process in a way that triggers a Resque::DirtyExit in the
+  # parent worker process. The parent process will then run the
+  # on_failure_retry hook against the Resque::DirtyExit, which should retry by
+  # default.
+  def self.on_failure_retry(exception, *)
+    super
+    Process.kill("KILL", Process.pid) if exception.is_a?(CustomException)
+  end
+end
+
 class RetryCallbacksJob
   extend Resque::Plugins::Retry
   @queue = :testing

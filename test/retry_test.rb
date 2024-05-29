@@ -325,5 +325,22 @@ class RetryTest < Minitest::Test
 
       assert_nil @worker.reserve
     end
+
+    def test_dirty_exits_during_failure_hooks
+      @worker.fork_per_job = true
+      Resque.enqueue(KilledDuringFailureHooksJob)
+
+      @worker.work_one_job
+      assert_equal 1, Resque.info[:processed], 'Did not process job'
+      assert_equal 1, Resque.info[:failed], 'Job should have failed'
+      assert_equal 1, Resque.info[:pending], 'Retry should be pending'
+      refute_nil Resque.peek(:testing), 'Retry should have been enqueued'
+
+      @worker.work_one_job
+      assert_equal 2, Resque.info[:processed], 'Did not process retry'
+      assert_equal 2, Resque.info[:failed], 'Retry should have failed'
+      assert_equal 0, Resque.info[:pending], 'Another retry should not be pending'
+      assert_nil Resque.peek(:testing), 'Should have only retried once'
+    end
   end
 end
